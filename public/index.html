@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sistema Colaborativo</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 20px;
+      line-height: 1.6;
+    }
+    .container {
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      padding: 20px;
+      margin-top: 20px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    h1 {
+      color: #2c3e50;
+    }
+    .success {
+      background-color: #d4edda;
+      color: #155724;
+      padding: 10px;
+      border-radius: 4px;
+      margin-bottom: 20px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Sistema Colaborativo</h1>
+    <div class="success">El servidor está funcionando correctamente.</div>
+    <p>Esta es una API RESTful para una plataforma de gestión colaborativa de proyectos con notificaciones en tiempo real.</p>
+    <h2>Endpoints disponibles:</h2>
+    <ul>
+      <li><code>GET /</code> - Página principal</li>
+      <li><code>POST /api/auth/registro</code> - Registrar usuario</li>
+      <li><code>POST /api/auth/login</code> - Iniciar sesión</li>
+      <li><code>GET /api/proyectos</code> - Listar proyectos</li>
+      <li><code>POST /api/proyectos</code> - Crear proyecto</li>
+      <li><code>POST /api/tareas</code> - Crear tarea</li>
+    </ul>
+  </div>
+</body>
+</html>
