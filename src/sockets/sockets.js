@@ -11,7 +11,7 @@ module.exports = (io) => {
         return next(new Error('No autorizado. Token no proporcionado'));
       }
       
-      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      const decoded = jwt.verify(token, process.env.JWT_SECRET || 'secret_key_sistema_colaborativo');
       const usuario = await Usuario.findByPk(decoded.id);
       
       if (!usuario) {
@@ -27,7 +27,7 @@ module.exports = (io) => {
   });
 
   io.on('connection', (socket) => {
-    console.log(`Usuario conectado: ${socket.usuario.id}`);
+    console.log(`Usuario conectado: ${socket.usuario.id} (${socket.usuario.nombre})`);
     
     // Unir al usuario a su sala personal (para recibir notificaciones)
     socket.join(`user_${socket.usuario.id}`);
@@ -46,12 +46,9 @@ module.exports = (io) => {
     
     // Evento de desconexión
     socket.on('disconnect', () => {
-      console.log(`Usuario desconectado: ${socket.usuario.id}`);
+      console.log(`Usuario desconectado: ${socket.usuario.id} (${socket.usuario.nombre})`);
     });
   });
-  
-  // Guardar la instancia de io en el app para usarla en controladores
-  io.app = io;
-  
+
   return io;
 };

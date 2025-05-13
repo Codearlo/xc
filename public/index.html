@@ -29,6 +29,31 @@
       border-radius: 4px;
       margin-bottom: 20px;
     }
+    .demo-section {
+      margin-top: 30px;
+    }
+    #notification-area {
+      display: none;
+      background-color: #f8d7da;
+      color: #721c24;
+      padding: 10px;
+      border-radius: 4px;
+      margin-top: 20px;
+    }
+    .notification {
+      margin-bottom: 10px;
+      padding: 8px;
+      background-color: #f8f9fa;
+      border-left: 3px solid #007bff;
+    }
+    .code-block {
+      background-color: #f5f5f5;
+      padding: 15px;
+      border-radius: 5px;
+      font-family: monospace;
+      margin: 10px 0;
+      overflow-x: auto;
+    }
   </style>
 </head>
 <body>
@@ -36,6 +61,7 @@
     <h1>Sistema Colaborativo</h1>
     <div class="success">El servidor está funcionando correctamente.</div>
     <p>Esta es una API RESTful para una plataforma de gestión colaborativa de proyectos con notificaciones en tiempo real.</p>
+    
     <h2>Endpoints disponibles:</h2>
     <ul>
       <li><code>GET /</code> - Página principal</li>
@@ -43,8 +69,175 @@
       <li><code>POST /api/auth/login</code> - Iniciar sesión</li>
       <li><code>GET /api/proyectos</code> - Listar proyectos</li>
       <li><code>POST /api/proyectos</code> - Crear proyecto</li>
+      <li><code>POST /api/proyectos/:id/invitar</code> - Invitar usuario a proyecto</li>
+      <li><code>GET /api/tareas</code> - Listar tareas</li>
       <li><code>POST /api/tareas</code> - Crear tarea</li>
+      <li><code>PATCH /api/tareas/:id/estado</code> - Actualizar estado de tarea</li>
     </ul>
+
+    <div class="demo-section">
+      <h2>Demostración WebSockets</h2>
+      <p>Esta sección demuestra la funcionalidad de notificaciones en tiempo real con WebSockets.</p>
+      
+      <div>
+        <label for="token">Token JWT:</label>
+        <input type="text" id="token" style="width: 300px;" placeholder="Introduce tu token JWT aquí">
+        <button onclick="conectarSocket()">Conectar</button>
+        <button onclick="desconectarSocket()" id="btn-disconnect" style="display:none;">Desconectar</button>
+      </div>
+      
+      <div>
+        <label for="proyecto-id">ID de Proyecto:</label>
+        <input type="number" id="proyecto-id" style="width: 100px;" placeholder="ID">
+        <button onclick="unirseProyecto()" id="btn-join-proyecto" disabled>Unirse a Proyecto</button>
+        <button onclick="salirProyecto()" id="btn-leave-proyecto" disabled>Salir de Proyecto</button>
+      </div>
+
+      <div id="notification-area"></div>
+
+      <h3>Código de ejemplo para conectar con WebSockets:</h3>
+      <pre class="code-block">
+const socket = io('http://localhost:3000', {
+  auth: {
+    token: 'tu_token_jwt'
+  }
+});
+
+socket.on('connect', () => {
+  console.log('Conectado con Socket.io');
+});
+
+socket.on('tarea_actualizada', (data) => {
+  console.log(`Tarea "${data.titulo}" actualizada de ${data.estadoAnterior} a ${data.estadoNuevo}`);
+});
+
+socket.on('invitacion_proyecto', (data) => {
+  console.log(`Has sido invitado al proyecto "${data.proyecto_titulo}" por ${data.invitadoPor}`);
+});
+
+// Para unirse a una sala de proyecto
+socket.emit('join_proyecto', proyecto_id);
+
+// Para salir de una sala de proyecto
+socket.emit('leave_proyecto', proyecto_id);
+      </pre>
+    </div>
   </div>
+  
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    let socketInstance = null;
+    
+    function mostrarNotificacion(mensaje) {
+      const notificationArea = document.getElementById('notification-area');
+      const notificacion = document.createElement('div');
+      notificacion.className = 'notification';
+      notificacion.textContent = mensaje;
+      
+      notificationArea.appendChild(notificacion);
+      
+      // Asegurarse de que el área de notificaciones esté visible
+      notificationArea.style.display = 'block';
+    }
+    
+    function conectarSocket() {
+      const token = document.getElementById('token').value;
+      if (!token) {
+        alert('Por favor ingresa un token JWT válido');
+        return;
+      }
+      
+      if (socketInstance) {
+        socketInstance.disconnect();
+      }
+      
+      socketInstance = io({
+        auth: {
+          token: token
+        }
+      });
+      
+      socketInstance.on('connect', () => {
+        document.getElementById('notification-area').style.display = 'block';
+        document.getElementById('notification-area').innerHTML = '<div class="notification">Conectado con Socket.io. Esperando notificaciones...</div>';
+        
+        // Habilitar botones
+        document.getElementById('btn-disconnect').style.display = 'inline-block';
+        document.getElementById('btn-join-proyecto').disabled = false;
+        document.getElementById('btn-leave-proyecto').disabled = false;
+      });
+      
+      socketInstance.on('connect_error', (error) => {
+        document.getElementById('notification-area').style.display = 'block';
+        document.getElementById('notification-area').innerHTML = `<div class="notification">Error de conexión: ${error.message}</div>`;
+      });
+      
+      socketInstance.on('tarea_actualizada', (data) => {
+        const mensaje = `Tarea "${data.titulo}" actualizada de ${data.estadoAnterior} a ${data.estadoNuevo} por ${data.actualizadoPor}`;
+        mostrarNotificacion(mensaje);
+      });
+      
+      socketInstance.on('invitacion_proyecto', (data) => {
+        const mensaje = `Has sido invitado al proyecto "${data.proyecto_titulo}" por ${data.invitadoPor}`;
+        mostrarNotificacion(mensaje);
+      });
+      
+      socketInstance.on('proyecto_eliminado', (data) => {
+        const mensaje = `El proyecto "${data.proyecto_titulo}" ha sido eliminado por ${data.eliminadoPor}`;
+        mostrarNotificacion(mensaje);
+      });
+      
+      socketInstance.on('tarea_creada', (data) => {
+        const mensaje = `Se ha creado una nueva tarea "${data.titulo}" por ${data.creadaPor}`;
+        mostrarNotificacion(mensaje);
+      });
+      
+      socketInstance.on('disconnect', () => {
+        mostrarNotificacion('Desconectado del servidor');
+        document.getElementById('btn-disconnect').style.display = 'none';
+        document.getElementById('btn-join-proyecto').disabled = true;
+        document.getElementById('btn-leave-proyecto').disabled = true;
+      });
+    }
+    
+    function desconectarSocket() {
+      if (socketInstance) {
+        socketInstance.disconnect();
+        socketInstance = null;
+      }
+    }
+    
+    function unirseProyecto() {
+      if (!socketInstance) {
+        alert('Primero debes conectarte al socket');
+        return;
+      }
+      
+      const proyectoId = document.getElementById('proyecto-id').value;
+      if (!proyectoId) {
+        alert('Por favor ingresa un ID de proyecto válido');
+        return;
+      }
+      
+      socketInstance.emit('join_proyecto', parseInt(proyectoId));
+      mostrarNotificacion(`Te has unido al proyecto ${proyectoId}`);
+    }
+    
+    function salirProyecto() {
+      if (!socketInstance) {
+        alert('Primero debes conectarte al socket');
+        return;
+      }
+      
+      const proyectoId = document.getElementById('proyecto-id').value;
+      if (!proyectoId) {
+        alert('Por favor ingresa un ID de proyecto válido');
+        return;
+      }
+      
+      socketInstance.emit('leave_proyecto', parseInt(proyectoId));
+      mostrarNotificacion(`Has salido del proyecto ${proyectoId}`);
+    }
+  </script>
 </body>
 </html>

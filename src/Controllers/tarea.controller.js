@@ -46,6 +46,16 @@ exports.crearTarea = async (req, res, next) => {
       include: [{ model: Archivo, as: 'archivos' }]
     });
 
+    // Notificar a los miembros del proyecto sobre la nueva tarea
+    const io = req.app.get('io');
+    if (io) {
+      io.to(`proyecto_${proyecto_id}`).emit('tarea_creada', {
+        id: tarea.id,
+        titulo: tarea.titulo,
+        creadaPor: req.usuario.nombre
+      });
+    }
+
     res.status(201).json(tareaConArchivos);
   } catch (error) {
     console.error('Error al crear tarea:', error);
@@ -81,7 +91,11 @@ exports.obtenerTareas = async (req, res, next) => {
       where: whereCondition,
       limit,
       offset,
-      order: [['createdAt', 'DESC']]
+      order: [['createdAt', 'DESC']],
+      include: [
+        { model: Usuario, as: 'asignado', attributes: ['id', 'nombre'] },
+        { model: Archivo, as: 'archivos' }
+      ]
     });
 
     const total = await Tarea.count({ where: whereCondition });
@@ -120,7 +134,9 @@ exports.actualizarEstadoTarea = async (req, res, next) => {
     }
 
     // Buscar la tarea
-    const tarea = await Tarea.findByPk(id);
+    const tarea = await Tarea.findByPk(id, {
+      include: [{ model: Proyecto, as: 'proyecto' }]
+    });
 
     if (!tarea) {
       return res.status(404).json({ error: 'Tarea no encontrada' });
@@ -131,9 +147,46 @@ exports.actualizarEstadoTarea = async (req, res, next) => {
     tarea.estado = estado;
     await tarea.save();
 
+    // Emitir evento a través de Socket.io para notificar en tiempo real
+    const io = req.app.get('io');
+    if (io) {
+      // Notificar a todos los usuarios del proyecto
+      io.to(`proyecto_${tarea.proyecto_id}`).emit('tarea_actualizada', {
+        id: tarea.id,
+        titulo: tarea.titulo,
+        estadoAnterior,
+        estadoNuevo: estado,
+        actualizadoPor: req.usuario.nombre
+      });
+    }
+
     res.json(tarea);
   } catch (error) {
     console.error('Error al actualizar estado de tarea:', error);
+    res.status(500).json({ error: 'Error en el servidor' });
+  }
+};
+
+// Obtener detalle de una tarea
+exports.obtenerTareaPorId = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+
+    const tarea = await Tarea.findByPk(id, {
+      include: [
+        { model: Usuario, as: 'asignado', attributes: ['id', 'nombre'] },
+        { model: Archivo, as: 'archivos' },
+        { model: Proyecto, as: 'proyecto', attributes: ['id', 'titulo'] }
+      ]
+    });
+
+    if (!tarea) {
+      return res.status(404).json({ error: 'Tarea no encontrada' });
+    }
+
+    res.json(tarea);
+  } catch (error) {
+    console.error('Error al obtener tarea por ID:', error);
     res.status(500).json({ error: 'Error en el servidor' });
   }
 };

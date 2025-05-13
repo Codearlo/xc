@@ -14,3 +14,16 @@ services:
       - ./uploads:/usr/src/app/uploads
       - ./database.sqlite:/usr/src/app/database.sqlite
     restart: always
+    depends_on:
+      - redis
+
+  redis:
+    image: redis:alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    restart: always
+
+volumes:
+  redis_data:

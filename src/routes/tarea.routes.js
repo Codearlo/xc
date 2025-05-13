@@ -25,6 +25,9 @@ router.post(
 // Obtener tareas (con filtros)
 router.get('/', tareaController.obtenerTareas);
 
+// Obtener una tarea específica por ID
+router.get('/:id', tareaController.obtenerTareaPorId);
+
 // Actualizar el estado de una tarea
 router.patch(
   '/:id/estado',

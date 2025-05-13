@@ -12,7 +12,7 @@ exports.crearProyecto = async (req, res, next) => {
     }
 
     const { titulo, descripcion } = req.body;
-    const usuario_id = req.usuario?.id || 1; // Fallback para pruebas
+    const usuario_id = req.usuario?.id;
 
     // Crear el proyecto
     const proyecto = await Proyecto.create({
@@ -40,15 +40,51 @@ exports.obtenerProyectos = async (req, res, next) => {
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
     const offset = (page - 1) * limit;
+    const usuario_id = req.usuario?.id;
 
-    // Obtener los proyectos (simplificado para iniciar)
+    // Obtener los proyectos donde el usuario es colaborador o creador
     const proyectos = await Proyecto.findAll({
+      include: [
+        {
+          model: Usuario,
+          as: 'colaboradores',
+          attributes: ['id', 'nombre', 'email'],
+          through: { attributes: [] }
+        }
+      ],
+      where: {
+        [Sequelize.Op.or]: [
+          { usuario_id }, // Es el creador
+          {
+            '$colaboradores.id$': usuario_id // Es colaborador
+          }
+        ]
+      },
       limit,
       offset,
       order: [['createdAt', 'DESC']]
     });
 
-    const total = await Proyecto.count();
+    // Contar el total
+    const total = await Proyecto.count({
+      include: [
+        {
+          model: Usuario,
+          as: 'colaboradores',
+          attributes: [],
+          through: { attributes: [] }
+        }
+      ],
+      where: {
+        [Sequelize.Op.or]: [
+          { usuario_id },
+          {
+            '$colaboradores.id$': usuario_id
+          }
+        ]
+      },
+      distinct: true
+    });
 
     // Calcular información de paginación
     const totalPages = Math.ceil(total / limit);
@@ -75,11 +111,27 @@ exports.obtenerProyectos = async (req, res, next) => {
 exports.obtenerProyectoPorId = async (req, res, next) => {
   try {
     const { id } = req.params;
+    const usuario_id = req.usuario?.id;
 
-    const proyecto = await Proyecto.findByPk(id);
+    const proyecto = await Proyecto.findByPk(id, {
+      include: [
+        {
+          model: Usuario,
+          as: 'colaboradores',
+          attributes: ['id', 'nombre', 'email'],
+          through: { attributes: [] }
+        }
+      ]
+    });
 
     if (!proyecto) {
       return res.status(404).json({ error: 'Proyecto no encontrado' });
+    }
+
+    // Verificar si el usuario es colaborador o creador
+    const esColaborador = proyecto.colaboradores.some(col => col.id === usuario_id);
+    if (proyecto.usuario_id !== usuario_id && !esColaborador) {
+      return res.status(403).json({ error: 'No tienes permisos para ver este proyecto' });
     }
 
     res.json(proyecto);
@@ -94,11 +146,26 @@ exports.invitarUsuario = async (req, res, next) => {
   try {
     const { id } = req.params;
     const { usuarioId } = req.body;
+    const usuario_id = req.usuario?.id;
 
     // Verificar que el proyecto exista
     const proyecto = await Proyecto.findByPk(id);
     if (!proyecto) {
       return res.status(404).json({ error: 'Proyecto no encontrado' });
+    }
+
+    // Verificar que el usuario solicitante sea el creador o un colaborador
+    if (proyecto.usuario_id !== usuario_id) {
+      const esColaborador = await ProyectoUsuario.findOne({
+        where: {
+          proyecto_id: id,
+          usuario_id
+        }
+      });
+      
+      if (!esColaborador) {
+        return res.status(403).json({ error: 'No tienes permisos para invitar usuarios a este proyecto' });
+      }
     }
 
     // Verificar que el usuario a invitar exista
@@ -107,11 +174,34 @@ exports.invitarUsuario = async (req, res, next) => {
       return res.status(404).json({ error: 'Usuario a invitar no encontrado' });
     }
 
+    // Verificar si el usuario ya es colaborador
+    const yaEsColaborador = await ProyectoUsuario.findOne({
+      where: {
+        proyecto_id: id,
+        usuario_id: usuarioId
+      }
+    });
+
+    if (yaEsColaborador) {
+      return res.status(400).json({ error: 'El usuario ya es colaborador de este proyecto' });
+    }
+
     // Añadir el usuario como colaborador
     await ProyectoUsuario.create({
       proyecto_id: id,
       usuario_id: usuarioId
     });
+
+    // Emitir evento a través de Socket.io para notificar en tiempo real
+    const io = req.app.get('io');
+    if (io) {
+      // Notificar al usuario invitado
+      io.to(`user_${usuarioId}`).emit('invitacion_proyecto', {
+        proyecto_id: id,
+        proyecto_titulo: proyecto.titulo,
+        invitadoPor: req.usuario.nombre
+      });
+    }
 
     res.status(201).json({ mensaje: 'Usuario invitado correctamente' });
   } catch (error) {
@@ -124,6 +214,7 @@ exports.invitarUsuario = async (req, res, next) => {
 exports.eliminarProyecto = async (req, res, next) => {
   try {
     const { id } = req.params;
+    const usuario_id = req.usuario?.id;
 
     // Verificar que el proyecto exista
     const proyecto = await Proyecto.findByPk(id);
@@ -131,8 +222,23 @@ exports.eliminarProyecto = async (req, res, next) => {
       return res.status(404).json({ error: 'Proyecto no encontrado' });
     }
 
+    // Verificar que el usuario sea el creador o un administrador
+    if (proyecto.usuario_id !== usuario_id && req.usuario.rol !== 'admin') {
+      return res.status(403).json({ error: 'No tienes permisos para eliminar este proyecto' });
+    }
+
     // Eliminar el proyecto
     await proyecto.destroy();
+
+    // Notificar a los colaboradores
+    const io = req.app.get('io');
+    if (io) {
+      io.to(`proyecto_${id}`).emit('proyecto_eliminado', {
+        proyecto_id: id,
+        proyecto_titulo: proyecto.titulo,
+        eliminadoPor: req.usuario.nombre
+      });
+    }
 
     res.json({ mensaje: 'Proyecto eliminado correctamente' });
   } catch (error) {
