@@ -1,0 +1,16 @@
+version: '3.8'
+
+services:
+  app:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      - PORT=3000
+      - JWT_SECRET=secret_key_sistema_colaborativo
+      - JWT_EXPIRES_IN=2h
+      - UPLOADS_DIR=./uploads
+    volumes:
+      - ./uploads:/usr/src/app/uploads
+      - ./database.sqlite:/usr/src/app/database.sqlite
+    restart: always
